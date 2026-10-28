@@ -1,0 +1,305 @@
++*In[1]:*+
+[source, ipython3]
+----
+import random
+
+distance = [
+    [0, 2, 4, 5],
+    [2, 0, 3, 6],
+    [4, 3, 0, 2],
+    [5, 6, 2, 0]
+]
+
+n = len(distance)
+ants = 4
+iterations = 20
+alpha = 1
+beta = 2
+rho = 0.5
+Q = 100
+
+
+pheromone = [[1.0] * n for _ in range(n)]
+
+best_tour = None
+best_distance = float('inf')
+
+for iteration in range(iterations):
+    all_tours = []
+
+    for ant in range(ants):
+        tour = [0]
+        unvisited = list(range(1, n))
+
+        while unvisited:
+            current = tour[-1]
+            probabilities = []
+
+            for city in unvisited:
+                tau = pheromone[current][city] ** alpha
+                eta = (1 / distance[current][city]) ** beta
+                probabilities.append(tau * eta)
+
+            total = sum(probabilities)
+            probabilities = [p / total for p in probabilities]
+
+            next_city = random.choices(
+                unvisited, weights=probabilities, k=1
+            )[0]
+
+            tour.append(next_city)
+            unvisited.remove(next_city)
+
+        tour.append(0)
+
+        length = sum(
+            distance[tour[i]][tour[i + 1]]
+            for i in range(n)
+        )
+
+        all_tours.append((tour, length))
+
+        if length < best_distance:
+            best_distance = length
+            best_tour = tour[:]
+
+    for i in range(n):
+        for j in range(n):
+
+    for tour, length in all_tours:
+        deposit = Q / length
+
+        for i in range(n):
+            a = tour[i]
+            b = tour[i + 1]
+            pheromone[a][b] += deposit
+            pheromone[b][a] += deposit
+
+print("Best Tour:", best_tour)
+print("Shortest Distance:", best_distance)
+----
+
+
++*Out[1]:*+
+----
+Best Tour: [0, 1, 2, 3, 0]
+Shortest Distance: 12
+----
+
+
++*In[2]:*+
+[source, ipython3]
+----
+import math
+import random
+
+
+class AntColonyOptimization:
+
+  def __init__(
+      self,
+      cities: dict,
+      num_ants: int = 10,
+      alpha: float = 1.0,
+      beta: float = 2.0,
+      rho: float = 0.5,
+      iterations: int = 50,
+      initial_pheromone: float = 1.0,
+  ):
+    """Initialize ACO parameters and problem domain.
+
+    Step 1 & 2: Define Problem & Initialize Parameters
+    """
+    self.cities = cities
+    self.city_names = list(cities.keys())
+    self.num_cities = len(cities)
+    self.num_ants = num_ants
+    self.alpha = alpha  # Pheromone importance
+    self.beta = beta  # Heuristic (distance) importance
+    self.rho = rho  # Evaporation rate
+    self.iterations = iterations
+
+    # Step 1: Pre-calculate Distance Matrix
+    self.dist_matrix = [
+        [0.0] * self.num_cities for _ in range(self.num_cities)
+    ]
+    for i in range(self.num_cities):
+      for j in range(self.num_cities):
+        if i != j:
+          x1, y1 = cities[self.city_names[i]]
+          x2, y2 = cities[self.city_names[j]]
+          self.dist_matrix[i][j] = math.hypot(x2 - x1, y2 - y1)
+
+    # Step 2: Initialize Pheromone Matrix
+    self.pheromone = [
+        [initial_pheromone for _ in range(self.num_cities)]
+        for _ in range(self.num_cities)
+    ]
+
+  def _select_next_city(self, current: int, unvisited: set) -> int:
+    """Step 3: Probabilistic city selection using pheromone and heuristic values."""
+    unvisited_list = list(unvisited)
+    probabilities = []
+
+    for city in unvisited_list:
+      tau = self.pheromone[current][city] ** self.alpha
+      eta = (1.0 / self.dist_matrix[current][city]) ** self.beta
+      probabilities.append(tau * eta)
+
+    total_prob = sum(probabilities)
+    if total_prob == 0:
+      return random.choice(unvisited_list)
+
+    # Normalize probabilities
+    probabilities = [p / total_prob for p in probabilities]
+
+    # Weighted random selection (Roulette Wheel Selection)
+    return random.choices(unvisited_list, weights=probabilities, k=1)[0]
+
+  def _construct_solution(self) -> tuple[list[int], float]:
+    """Step 3: Construct a full tour for a single ant."""
+    start_city = random.randint(0, self.num_cities - 1)
+    tour = [start_city]
+    unvisited = set(range(self.num_cities)) - {start_city}
+
+    current = start_city
+    while unvisited:
+      next_city = self._select_next_city(current, unvisited)
+      tour.append(next_city)
+      unvisited.remove(next_city)
+      current = next_city
+
+    # Calculate total tour distance including returning to origin
+    distance = sum(
+        self.dist_matrix[tour[i]][tour[(i + 1) % self.num_cities]]
+        for i in range(self.num_cities)
+    )
+    return tour, distance
+
+  def _update_pheromones(
+      self, all_tours: list[list[int]], all_distances: list[float]
+  ):
+    """Step 4: Evaporate old pheromones and deposit new pheromones."""
+    # Evaporation phase
+    for i in range(self.num_cities):
+      for j in range(self.num_cities):
+        self.pheromone[i][j] *= 1.0 - self.rho
+
+    # Deposit phase based on tour quality
+    for tour, dist in zip(all_tours, all_distances):
+      deposit = 1.0 / dist
+      for i in range(self.num_cities):
+        c1 = tour[i]
+        c2 = tour[(i + 1) % self.num_cities]
+        self.pheromone[c1][c2] += deposit
+        self.pheromone[c2][c1] += deposit
+
+  def run(self) -> tuple[list[str], float]:
+    """Step 5 & 6: Execute ACO iterations and return best solution found."""
+    best_tour = None
+    best_distance = float("inf")
+
+    print("==================================================")
+    print("      Ant Colony Optimization (TSP) Progress     ")
+    print("==================================================")
+
+    for iteration in range(1, self.iterations + 1):
+      all_tours = []
+      all_distances = []
+
+      # Construct solutions for all ants
+      for _ in range(self.num_ants):
+        tour, dist = self._construct_solution()
+        all_tours.append(tour)
+        all_distances.append(dist)
+
+        # Track global best solution
+        if dist < best_distance:
+          best_distance = dist
+          best_tour = tour
+
+      # Update pheromone trails
+      self._update_pheromones(all_tours, all_distances)
+
+      # Log progress every 10 iterations
+      if iteration % 10 == 0 or iteration == 1:
+        named_tour = [self.city_names[i] for i in best_tour] + [
+            self.city_names[best_tour[0]]
+        ]
+        print(
+            f"Iteration {iteration:2d}/{self.iterations:2d} | "
+            f"Best Distance: {best_distance:.4f} | "
+            f"Path: {' -> '.join(named_tour)}"
+        )
+
+    named_best_tour = [self.city_names[i] for i in best_tour] + [
+        self.city_names[best_tour[0]]
+    ]
+    return named_best_tour, best_distance
+
+
+if __name__ == "__main__":
+  # Step 1: Define Problem Set (2D Coordinate Space)
+  city_coordinates = {
+      "A": (0, 0),
+      "B": (2, 5),
+      "C": (5, 2),
+      "D": (6, 6),
+      "E": (8, 3),
+  }
+
+  # Set seed for reproducible lab execution
+  random.seed(42)
+
+  # Step 2: Initialize Parameters
+  aco = AntColonyOptimization(
+      cities=city_coordinates,
+      num_ants=10,
+      alpha=1.0,  # Importance of pheromone
+      beta=2.0,  # Importance of heuristic (distance)
+      rho=0.5,  # Evaporation rate
+      iterations=50,  # Number of generations
+      initial_pheromone=1.0,
+  )
+
+  # Step 5 & 6: Run and Output Best Solution
+  best_route, shortest_distance = aco.run()
+
+  print("\n================ FINAL LAB OUTPUT ================")
+  print(f"Optimal Path     : {' -> '.join(best_route)}")
+  print(f"Shortest Distance: {shortest_distance:.4f}")
+  print("==================================================")
+----
+
+
++*Out[2]:*+
+----
+==================================================
+      Ant Colony Optimization (TSP) Progress     
+==================================================
+Iteration  1/50 | Best Distance: 21.6613 | Path: C -> A -> B -> D -> E -> C
+Iteration 10/50 | Best Distance: 21.6613 | Path: C -> A -> B -> D -> E -> C
+Iteration 20/50 | Best Distance: 21.6613 | Path: C -> A -> B -> D -> E -> C
+Iteration 30/50 | Best Distance: 21.6613 | Path: C -> A -> B -> D -> E -> C
+Iteration 40/50 | Best Distance: 21.6613 | Path: C -> A -> B -> D -> E -> C
+Iteration 50/50 | Best Distance: 21.6613 | Path: C -> A -> B -> D -> E -> C
+
+================ FINAL LAB OUTPUT ================
+Optimal Path     : C -> A -> B -> D -> E -> C
+Shortest Distance: 21.6613
+==================================================
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+
+----
+
+
++*In[ ]:*+
+[source, ipython3]
+----
+
+----
